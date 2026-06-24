@@ -9,13 +9,14 @@ export const searchFoods = async (query, page = 0) => {
     });
 
     if (!response.ok) {
-      throw new Error('Search failed');
+      const err = await response.json().catch(() => ({}));
+      return { results: [], error: err.error || `HTTP ${response.status}` };
     }
 
     return await response.json();
   } catch (error) {
     console.error('Search error:', error);
-    return { results: [], totalPages: 0, currentPage: 0, totalResults: 0 };
+    return { results: [], error: error.message };
   }
 };
 

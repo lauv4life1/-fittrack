@@ -67,8 +67,9 @@ export default function FoodPage() {
     try {
       const result = await searchFoods(searchTerm);
       setApiResults(result.results || []);
-    } catch {
-      setSearchError('搜索失败，请确保后端服务器正在运行');
+      if (result.error) setSearchError(result.error);
+    } catch (e) {
+      setSearchError('搜索失败: ' + e.message);
       setApiResults([]);
     } finally {
       setIsSearching(false);
