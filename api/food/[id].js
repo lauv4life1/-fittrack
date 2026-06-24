@@ -1,36 +1,21 @@
-let accessToken = null;
-let tokenExpiry = 0;
+import crypto from 'crypto';
 
-async function getAccessToken() {
-  if (accessToken && Date.now() < tokenExpiry) return accessToken;
+function oauthSignature(method, url, params, consumerSecret) {
+  const sorted = Object.keys(params).sort().map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
+  const base = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(sorted)}`;
+  return crypto.createHmac('sha1', `${encodeURIComponent(consumerSecret)}&`).update(base).digest('base64');
+}
 
-  const clientId = process.env.FATSECRET_CLIENT_ID;
-  const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Missing FATSECRET_CLIENT_ID or FATSECRET_CLIENT_SECRET env vars');
-  }
-
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-  const response = await fetch('https://oauth.fatsecret.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials&scope=basic',
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Token request failed: ${response.status} ${err}`);
-  }
-
-  const data = await response.json();
-  accessToken = data.access_token;
-  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-  return accessToken;
+function buildAuthHeaders(method, url, consumerKey, consumerSecret) {
+  const oauthParams = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: crypto.randomBytes(16).toString('hex'),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: '1.0',
+  };
+  oauthParams.oauth_signature = oauthSignature(method, url, oauthParams, consumerSecret);
+  return 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`).join(', ');
 }
 
 export default async function handler(req, res) {
@@ -44,11 +29,19 @@ export default async function handler(req, res) {
     const { id } = req.query;
     if (!id) return res.status(400).json({ error: 'Food ID required' });
 
-    const token = await getAccessToken();
+    const key = process.env.FATSECRET_CLIENT_ID;
+    const secret = process.env.FATSECRET_CLIENT_SECRET;
+    if (!key || !secret) return res.status(500).json({ error: 'Missing FatSecret credentials' });
 
-    const url = `https://platform.fatsecret.com/rest/server.api?method=food.get.v5&food_id=${id}&format=json`;
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` },
+    const apiUrl = 'https://platform.fatsecret.com/rest/server.api';
+    const params = { method: 'food.get.v5', food_id: id.toString(), format: 'json' };
+    const auth = buildAuthHeaders('POST', apiUrl, key, secret);
+
+    const body = new URLSearchParams(params).toString();
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Authorization': auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
     });
 
     const data = await response.json();
