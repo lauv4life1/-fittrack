@@ -32,10 +32,12 @@ export default function FoodPage() {
   const [selectedApiFood, setSelectedApiFood] = useState(null);
   const [apiFoodAmount, setApiFoodAmount] = useState('100');
 
-  const [userData, setUserData] = useLocalStorage('userData', {
-    name: '', age: '', gender: 'male', height: '', weight: '',
-    activityLevel: 'moderate', goal: 'lose',
-  });
+  const [rawUserData, setRawUserData] = useLocalStorage('userData', null);
+  const userData = rawUserData || { name: '', age: '', gender: 'male', height: '', weight: '', activityLevel: 'moderate', goal: 'lose' };
+  const setUserData = (updater) => {
+    const newVal = typeof updater === 'function' ? updater(rawUserData || {}) : updater;
+    setRawUserData(newVal);
+  };
 
   const { addFoodEntry, removeFoodEntry, getDayLog, getDayTotals } = useFoodLog();
   const today = new Date().toISOString().split('T')[0];
@@ -45,7 +47,7 @@ export default function FoodPage() {
   let calorieTarget = 2000;
   let macroTargets = { protein: 150, carbs: 200, fat: 67 };
   
-  if (userData.weight && userData.height && userData.age) {
+  if (userData?.weight && userData?.height && userData?.age) {
     const bmr = calculateBMR(parseFloat(userData.weight), parseFloat(userData.height), parseInt(userData.age), userData.gender);
     const tdee = calculateTDEE(bmr, userData.activityLevel);
     calorieTarget = calculateCalorieTarget(tdee, userData.goal);
@@ -426,7 +428,7 @@ export default function FoodPage() {
                   <option value="gain">增肌 (+300 kcal)</option>
                 </select>
               </div>
-              {userData.weight && userData.height && userData.age && (
+              {userData?.weight && userData?.height && userData?.age && (
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
                   <p className="text-sm text-slate-400 mb-1">基础代谢 (BMR)</p>
                   <p className="text-lg font-bold">{formatNumber(Math.round(calculateBMR(parseFloat(userData.weight), parseFloat(userData.height), parseInt(userData.age), userData.gender)))} kcal</p>
