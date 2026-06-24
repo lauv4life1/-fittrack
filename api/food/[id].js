@@ -1,12 +1,18 @@
 import crypto from 'crypto';
 
-function oauthSignature(method, url, params, consumerSecret) {
-  const sorted = Object.keys(params).sort().map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
-  const base = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(sorted)}`;
-  return crypto.createHmac('sha1', `${encodeURIComponent(consumerSecret)}&`).update(base).digest('base64');
+function percentEncode(str) {
+  return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
 }
 
-function buildAuthHeaders(method, url, consumerKey, consumerSecret) {
+function buildSignature(method, url, params, consumerSecret) {
+  const sorted = Object.keys(params).sort()
+    .map(k => `${percentEncode(k)}=${percentEncode(params[k])}`)
+    .join('&');
+  const base = `${method.toUpperCase()}&${percentEncode(url)}&${percentEncode(sorted)}`;
+  return crypto.createHmac('sha1', `${percentEncode(consumerSecret)}&`).update(base).digest('base64');
+}
+
+function makeAuth(method, url, params, consumerKey, consumerSecret) {
   const oauthParams = {
     oauth_consumer_key: consumerKey,
     oauth_nonce: crypto.randomBytes(16).toString('hex'),
@@ -14,8 +20,10 @@ function buildAuthHeaders(method, url, consumerKey, consumerSecret) {
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
     oauth_version: '1.0',
   };
-  oauthParams.oauth_signature = oauthSignature(method, url, oauthParams, consumerSecret);
-  return 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`).join(', ');
+  oauthParams.oauth_signature = buildSignature(method, url, oauthParams, consumerSecret);
+  return 'OAuth ' + Object.keys(oauthParams).sort()
+    .map(k => `${percentEncode(k)}="${percentEncode(oauthParams[k])}"`)
+    .join(', ');
 }
 
 export default async function handler(req, res) {
@@ -31,13 +39,17 @@ export default async function handler(req, res) {
 
     const key = process.env.FATSECRET_CLIENT_ID;
     const secret = process.env.FATSECRET_CLIENT_SECRET;
-    if (!key || !secret) return res.status(500).json({ error: 'Missing FatSecret credentials' });
+    if (!key || !secret) return res.status(500).json({ error: 'Missing credentials' });
 
     const apiUrl = 'https://platform.fatsecret.com/rest/server.api';
-    const params = { method: 'food.get.v5', food_id: id.toString(), format: 'json' };
-    const auth = buildAuthHeaders('POST', apiUrl, key, secret);
+    const bodyParams = {
+      method: 'food.get.v5',
+      food_id: String(id),
+      format: 'json',
+    };
+    const auth = makeAuth('POST', apiUrl, bodyParams, key, secret);
 
-    const body = new URLSearchParams(params).toString();
+    const body = new URLSearchParams(bodyParams).toString();
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Authorization': auth, 'Content-Type': 'application/x-www-form-urlencoded' },
