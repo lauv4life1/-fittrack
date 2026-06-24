@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { 
   Search, Plus, Trash2, X, User, Target, Activity, Scale, Ruler, Calendar,
-  Globe, Loader2, AlertCircle, ChevronDown, ChevronUp, Utensils, ArrowUpRight
+  Globe, Loader2, AlertCircle
 } from 'lucide-react';
 import { commonFoods, foodCategories } from '../data/foodData';
 import { useFoodLog, useLocalStorage } from '../hooks/useStorage';
