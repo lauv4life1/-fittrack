@@ -4,9 +4,14 @@ let tokenExpiry = 0;
 async function getAccessToken() {
   if (accessToken && Date.now() < tokenExpiry) return accessToken;
 
-  const credentials = btoa(
-    `${process.env.FATSECRET_CLIENT_ID}:${process.env.FATSECRET_CLIENT_SECRET}`
-  );
+  const clientId = process.env.FATSECRET_CLIENT_ID;
+  const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Missing FATSECRET_CLIENT_ID or FATSECRET_CLIENT_SECRET env vars');
+  }
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   const response = await fetch('https://oauth.fatsecret.com/connect/token', {
     method: 'POST',
@@ -16,6 +21,11 @@ async function getAccessToken() {
     },
     body: 'grant_type=client_credentials&scope=basic',
   });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Token request failed: ${response.status} ${err}`);
+  }
 
   const data = await response.json();
   accessToken = data.access_token;
@@ -60,6 +70,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Search error:', error.message);
-    res.status(500).json({ error: 'Failed to search foods' });
+    res.status(500).json({ error: error.message });
   }
 }
