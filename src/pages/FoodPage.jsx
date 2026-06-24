@@ -293,7 +293,7 @@ export default function FoodPage() {
                       onChange={e => setCustomAmounts(p => ({ ...p, [food.id]: e.target.value }))}
                       className="w-14 input-field text-center text-xs py-1.5" />
                     <span className="text-[11px] text-slate-400">g</span>
-                    <button onClick={() => handleAddFood(food)} className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-900 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => handleAddFood(food)} className="p-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-all">
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
