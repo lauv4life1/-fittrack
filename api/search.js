@@ -1,18 +1,24 @@
 import crypto from 'crypto';
 
 function percentEncode(str) {
-  return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/\*/g, '%2A');
 }
 
-function buildSignature(method, url, params, consumerSecret) {
-  const sorted = Object.keys(params).sort()
-    .map(k => `${percentEncode(k)}=${percentEncode(params[k])}`)
+function makeSignature(method, url, allParams, consumerSecret) {
+  const sorted = Object.keys(allParams).sort()
+    .map(k => `${percentEncode(k)}=${percentEncode(allParams[k])}`)
     .join('&');
-  const base = `${method.toUpperCase()}&${percentEncode(url)}&${percentEncode(sorted)}`;
-  return crypto.createHmac('sha1', `${percentEncode(consumerSecret)}&`).update(base).digest('base64');
+  const base = `${method}&${percentEncode(url)}&${percentEncode(sorted)}`;
+  return crypto.createHmac('sha1', percentEncode(consumerSecret) + '&').update(base).digest('base64');
 }
 
-function makeAuth(method, url, params, consumerKey, consumerSecret) {
+function fatsecretRequest(bodyParams, consumerKey, consumerSecret) {
+  const url = 'https://platform.fatsecret.com/rest/server.api';
   const oauthParams = {
     oauth_consumer_key: consumerKey,
     oauth_nonce: crypto.randomBytes(16).toString('hex'),
@@ -20,17 +26,18 @@ function makeAuth(method, url, params, consumerKey, consumerSecret) {
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
     oauth_version: '1.0',
   };
-  oauthParams.oauth_signature = buildSignature(method, url, oauthParams, consumerSecret);
-  return 'OAuth ' + Object.keys(oauthParams).sort()
-    .map(k => `${percentEncode(k)}="${percentEncode(oauthParams[k])}"`)
-    .join(', ');
+  const allParams = { ...bodyParams, ...oauthParams };
+  const signature = makeSignature('POST', url, allParams, consumerSecret);
+  const authHeader = 'OAuth ' + Object.keys(oauthParams).sort()
+    .map(k => `${k}="${percentEncode(oauthParams[k])}"`)
+    .join(', ') + `, oauth_signature="${percentEncode(signature)}"`;
+  return { url, authHeader, body: new URLSearchParams(bodyParams).toString() };
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -42,20 +49,17 @@ export default async function handler(req, res) {
     const secret = process.env.FATSECRET_CLIENT_SECRET;
     if (!key || !secret) return res.status(500).json({ error: 'Missing credentials' });
 
-    const apiUrl = 'https://platform.fatsecret.com/rest/server.api';
-    const bodyParams = {
+    const { url, authHeader, body } = fatsecretRequest({
       method: 'foods.search',
       search_expression: query,
       page_number: String(page),
       max_results: '10',
       format: 'json',
-    };
-    const auth = makeAuth('POST', apiUrl, bodyParams, key, secret);
+    }, key, secret);
 
-    const body = new URLSearchParams(bodyParams).toString();
-    const response = await fetch(apiUrl, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Authorization': auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
 
